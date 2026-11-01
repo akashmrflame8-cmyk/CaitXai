@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Universal AI Chat</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gemini: {
+                            bg: '#f8f9fa',
+                            darkBg: '#131314',
+                            sidebar: '#f0f4f9',
+                            darkSidebar: '#1e1e1f',
+                            card: '#ffffff',
+                            darkCard: '#1e1e1f',
+                            border: '#e3e3e3',
+                            darkBorder: '#444746'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js for Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        /* Custom scrollbars & utilities */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .prose pre { padding: 0; background: transparent; }
+        .prose code { color: inherit; }
+        /* Prevent elastic pull-to-refresh on mobile Safari/Chrome */
+        html, body {
+            overscroll-behavior-y: none;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="h-full bg-gemini-bg dark:bg-gemini-darkBg text-gray-800 dark:text-gray-100 flex flex-col antialiased selection:bg-blue-200 dark:selection:bg-blue-900">
+
+    <!-- Loading Fallback Screen -->
+    <div id="loading" class="fixed inset-0 z-50 flex items-center justify-center bg-white dark:bg-gemini-darkBg">
+        <div class="flex flex-col items-center gap-3">
+            <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Loading Universal AI...</p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div id="app" class="hidden flex h-full w-full overflow-hidden relative">
+
+        <!-- Mobile Overlay -->
+        <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/40 z-20 hidden md:hidden transition-opacity"></div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed md:static inset-y-0 left-0 z-30 w-72 bg-gemini-sidebar dark:bg-gemini-darkSidebar flex flex-col border-r border-gemini-border dark:border-gemini-darkBorder transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out">
+            <!-- Sidebar Header -->
+            <div class="p-4 flex items-center justify-between">
+                <button onclick="createNewChat()" class="flex-1 flex items-center gap-3 px-4 py-3 rounded-full bg-blue-100 hover:bg-blue-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300 font-medium transition-colors text-sm shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span>New Chat</span>
+                </button>
+                <button onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 ml-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- History List -->
+            <div class="flex-1 overflow-y-auto px-3 py-2 space-y-1 no-scrollbar" id="chat-list">
+                <!-- Dynamically populated -->
+            </div>
+
+            <!-- Sidebar Footer Controls -->
+            <div class="p-3 border-t border-gemini-border dark:border-gemini-darkBorder space-y-1">
+                <button onclick="openModal('system-modal')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    <span>System Prompt</span>
+                </button>
+                <button onclick="openModal('settings-modal')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <span>Settings</span>
+                </button>
+                <button onclick="toggleDarkMode()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
+                    <svg id="theme-icon-sun" class="w-5 h-5 text-gray-500 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="theme-icon-moon" class="w-5 h-5 text-gray-500 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    <span id="theme-text">Toggle Theme</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="flex-1 flex flex-col h-full min-w-0 bg-gemini-bg dark:bg-gemini-darkBg relative">
+            
+            <!-- Top Navbar -->
+            <header class="h-14 border-b border-gemini-border dark:border-gemini-darkBorder flex items-center justify-between px-4 bg-gemini-bg/80 dark:bg-gemini-darkBg/80 backdrop-blur shrink-0 z-10">
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                    <h1 class="font-semibold text-lg text-gray-800 dark:text-gray-200 tracking-tight flex items-center gap-2">
+                        <span>Gemini AI</span>
+                        <span id="current-model-badge" class="text-xs font-normal px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 truncate max-w-[150px] sm:max-w-xs"></span>
+                    </h1>
+                </div>
+            </header>
+
+            <!-- Scrollable Messages Container -->
+            <div id="messages-container" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                <!-- Dynamic messages inject here -->
+            </div>
+
+            <!-- Sticky/Floating Input Area -->
+            <div class="p-3 sm:p-4 bg-transparent shrink-0">
+                <div class="max-w-3xl mx-auto">
+                    <form id="chat-form" onsubmit="handleSend(event)" class="relative flex items-end rounded-2xl bg-white dark:bg-gemini-darkCard border border-gemini-border dark:border-gemini-darkBorder shadow-lg focus-within:ring-2 focus-within:ring-blue-500/50 transition-all">
+                        <textarea 
+                            id="user-input" 
+                            rows="1" 
+                            placeholder="Message Gemini..." 
+                            onkeydown="handleKeyDown(event)"
+                            oninput="autoResizeTextarea(this)"
+                            class="w-full resize-none bg-transparent py-3.5 pl-4 pr-12 text-sm sm:text-base text-gray-800 dark:text-gray-100 focus:outline-none max-h-48 no-scrollbar"
+                        ></textarea>
+                        <button type="submit" id="send-btn" class="absolute right-2.5 bottom-2.5 p-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:hover:bg-blue-600 transition-colors">
+                            <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </form>
+                    <div class="text-[11px] text-center text-gray-400 dark:text-gray-500 mt-2">
+                        AI may present inaccurate information. Verify sensitive content.
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 bg-black/50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gemini-darkCard rounded-2xl max-w-md w-full p-6 shadow-xl border border-gemini-border dark:border-gemini-darkBorder space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-semibold">Settings</h3>
+                <button onclick="closeModal('settings-modal')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Model Name</label>
+                    <input type="text" id="setting-model" class="w-full px-3 py-2 rounded-lg border border-gemini-border dark:border-gemini-darkBorder bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="text-xs text-gray-400">
+                    Active backend configured securely via OpenRouter provider setup.
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="saveSettings()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Prompt Modal -->
+    <div id="system-modal" class="fixed inset-0 z-50 bg-black/50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gemini-darkCard rounded-2xl max-w-md w-full p-6 shadow-xl border border-gemini-border dark:border-gemini-darkBorder space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-semibold">System Prompt</h3>
+                <button onclick="closeModal('system-modal')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Behavior Instructions</label>
+                <textarea id="setting-system" rows="5" placeholder="You are a helpful assistant..." class="w-full p-3 rounded-lg border border-gemini-border dark:border-gemini-darkBorder bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="saveSystemPrompt()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">Update Instructions</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic (Vanilla JS) -->
+    <script>
+        (function() {
+            // Embedded API Key Credentials
+            const HARDCODED_KEY = "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";
+            const DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+            const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+
+            // Internal State
+            let state = {
+                chats: [],
+                activeChatId: null,
+                model: DEFAULT_MODEL,
+                systemPrompt: "You are a helpful, clever, and concise AI assistant.",
+                isGenerating: false
+            };
+
+            // Markdown Setup
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                    return hljs.highlight(code, { language }).value;
+                },
+                breaks: true
+            });
+
+            // Initialize App
+            window.addEventListener('DOMContentLoaded', () => {
+                loadState();
+                initTheme();
+                renderApp();
+
+                // Unhide app and remove loading screen cleanly
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('app').classList.remove('hidden');
+            });
+
+            // LocalStorage Sync
+            function loadState() {
+                try {
+                    const savedState = localStorage.getItem('gemini_clone_state');
+                    if (savedState) {
+                        const parsed = JSON.parse(savedState);
+                        state.chats = Array.isArray(parsed.chats) ? parsed.chats : [];
+                        state.activeChatId = parsed.activeChatId || null;
+                        state.model = parsed.model || DEFAULT_MODEL;
+                        state.systemPrompt = parsed.systemPrompt || state.systemPrompt;
+                    }
+                } catch (e) {
+                    console.error("Failed to load local storage state:", e);
+                }
+
+                if (state.chats.length === 0) {
+                    createNewChat(false);
+                } else if (!state.activeChatId || !state.chats.find(c => c.id === state.activeChatId)) {
+                    state.activeChatId = state.chats[0].id;
+                }
+            }
+
+            function saveState() {
+                try {
+                    localStorage.setItem('gemini_clone_state', JSON.stringify({
+                        chats: state.chats,
+                        activeChatId: state.activeChatId,
+                        model: state.model,
+                        systemPrompt: state.systemPrompt
+                    }));
+                } catch (e) {
+                    console.error("Failed to persist state:", e);
+                }
+            }
+
+            // Theme Management
+            function initTheme() {
+                const isDark = localStorage.getItem('gemini_theme') === 'dark' || 
+                    (!('gemini_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (isDark) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
+
+            window.toggleDarkMode = function() {
+                const isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('gemini_theme', isDark ? 'dark' : 'light');
+            };
+
+            // Responsive Sidebar Toggle
+            window.toggleSidebar = function() {
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+                const isHidden = sidebar.classList.contains('-translate-x-full');
+                
+                if (isHidden) {
+                    sidebar.classList.remove('-translate-x-full');
+                    overlay.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                }
+            };
+
+            // Chat & UI Operations
+            window.createNewChat = function(shouldSave = true) {
+                const newChat = {
+                    id: 'chat_' + Date.now(),
+                    title: 'New Conversation',
+                    messages: []
+                };
+                state.chats.unshift(newChat);
+                state.activeChatId = newChat.id;
+                if (shouldSave) saveState();
+                renderApp();
+                if (window.innerWidth < 768) {
+                    document.getElementById('sidebar').classList.add('-translate-x-full');
+                    document.getElementById('sidebar-overlay').classList.add('hidden');
+                }
+            };
+
+            window.switchChat = function(id) {
+                state.activeChatId = id;
+                saveState();
+                renderApp();
+                if (window.innerWidth < 768) {
+                    document.getElementById('sidebar').classList.add('-translate-x-full');
+                    document.getElementById('sidebar-overlay').classList.add('hidden');
+                }
+            };
+
+            window.deleteChat = function(id, event) {
+                event.stopPropagation();
+                state.chats = state.chats.filter(c => c.id !== id);
+                if (state.chats.length === 0) {
+                    createNewChat(false);
+                } else if (state.activeChatId === id) {
+                    state.activeChatId = state.chats[0].id;
+                }
+                saveState();
+                renderApp();
+            };
+
+            window.renameChat = function(id, event) {
+                event.stopPropagation();
+                const chat = state.chats.find(c => c.id === id);
+                if (!chat) return;
+                const newTitle = prompt("Enter new chat title:", chat.title);
+                if (newTitle && newTitle.trim() !== "") {
+                    chat.title = newTitle.trim();
+                    saveState();
+                    renderSidebar();
+                }
+            };
+
+            // Rendering Logic
+            function renderApp() {
+                renderSidebar();
+                renderMessages();
+                document.getElementById('current-model-badge').innerText = state.model;
+                document.getElementById('setting-model').value = state.model;
+                document.getElementById('setting-system').value = state.systemPrompt;
+            }
+
+            function renderSidebar() {
+                const chatList = document.getElementById('chat-list');
+                chatList.innerHTML = '';
+
+                state.chats.forEach(chat => {
+                    const isActive = chat.id === state.activeChatId;
+                    const item = document.createElement('div');
+                    item.className = `group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer text-sm transition-colors ${
+                        isActive 
+                            ? 'bg-blue-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 font-medium' 
+                            : 'hover:bg-gray-200/60 dark:hover:bg-gray-800/60 text-gray-700 dark:text-gray-300'
+                    }`;
+                    item.onclick = () => switchChat(chat.id);
+
+                    item.innerHTML = `
+                        <div class="flex items-center gap-2.5 truncate min-w-0 pr-2">
+                            <svg class="w-4 h-4 shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                            <span class="truncate">${escapeHtml(chat.title)}</span>
+                        </div>
+                        <div class="hidden group-hover:flex items-center gap-1 shrink-0">
+                            <button onclick="renameChat('${chat.id}', event)" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            </button>
+                            <button onclick="deleteChat('${chat.id}', event)" class="p-1 text-gray-400 hover:text-red-500">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    `;
+                    chatList.appendChild(item);
+                });
+            }
+
+            function renderMessages() {
+                const container = document.getElementById('messages-container');
+                container.innerHTML = '';
+                
+                const activeChat = state.chats.find(c => c.id === state.activeChatId);
+                if (!activeChat || activeChat.messages.length === 0) {
+                    container.innerHTML = `
+                        <div class="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <div>
+                                <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100">Where key ideas begin</h2>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Ask anything, generate solutions, or build code.</p>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                activeChat.messages.forEach(msg => {
+                    const msgEl = createMessageElement(msg.role, msg.content);
+                    container.appendChild(msgEl);
+                });
+
+                scrollToBottom();
+            }
+
+            function createMessageElement(role, content = '') {
+                const wrapper = document.createElement('div');
+                const isUser = role === 'user';
+                wrapper.className = `flex gap-3 sm:gap-4 max-w-3xl mx-auto ${isUser ? 'justify-end' : 'justify-start'}`;
+
+                const inner = document.createElement('div');
+                inner.className = `flex gap-3 sm:gap-4 max-w-[88%] sm:max-w-[85%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`;
+
+                const avatar = document.createElement('div');
+                avatar.className = `w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isUser 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-emerald-600 text-white'
+                }`;
+                avatar.innerText = isUser ? 'U' : 'AI';
+
+                const bubble = document.createElement('div');
+                bubble.className = `message-body text-sm sm:text-base ${
+                    isUser 
+                        ? 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-none' 
+                        : 'prose dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 py-1'
+                }`;
+
+                if (isUser) {
+                    bubble.innerText = content;
+                } else {
+                    bubble.innerHTML = marked.parse(content || '');
+                }
+
+                inner.appendChild(avatar);
+                inner.appendChild(bubble);
+                wrapper.appendChild(inner);
+
+                return wrapper;
+            }
+
+            // Input Handling & API Communications
+            window.handleKeyDown = function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    document.getElementById('chat-form').requestSubmit();
+                }
+            };
+
+            window.autoResizeTextarea = function(el) {
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 192) + 'px';
+            };
+
+            window.handleSend = async function(e) {
+                e.preventDefault();
+                if (state.isGenerating) return;
+
+                const inputEl = document.getElementById('user-input');
+                const content = inputEl.value.trim();
+                if (!content) return;
+
+                // Reset input size & value
+                inputEl.value = '';
+                inputEl.style.height = 'auto';
+
+                const activeChat = state.chats.find(c => c.id === state.activeChatId);
+                if (!activeChat) return;
+
+                // Set chat title if first message
+                if (activeChat.messages.length === 0) {
+                    activeChat.title = content.slice(0, 30) + (content.length > 30 ? '...' : '');
+                    renderSidebar();
+                }
+
+                // Add User Message
+                activeChat.messages.push({ role: 'user', content });
+                renderMessages();
+
+                // Lock UI
+                state.isGenerating = true;
+                const sendBtn = document.getElementById('send-btn');
+                sendBtn.disabled = true;
+
+                // Create AI message shell
+                const container = document.getElementById('messages-container');
+                const aiWrapper = createMessageElement('assistant', '');
+                container.appendChild(aiWrapper);
+                const aiBubble = aiWrapper.querySelector('.message-body');
+                scrollToBottom();
+
+                // Build Request Payload
+                const apiMessages = [];
+                if (state.systemPrompt.trim()) {
+                    apiMessages.push({ role: "system", content: state.systemPrompt.trim() });
+                }
+                activeChat.messages.forEach(m => {
+                    apiMessages.push({ role: m.role, content: m.content });
+                });
+
+                let accumulatedResponse = "";
+
+                try {
+                    const response = await fetch(ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${HARDCODED_KEY}`,
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': window.location.href,
+                            'X-Title': 'Universal AI Chat'
+                        },
+                        body: JSON.stringify({
+                            model: state.model,
+                            messages: apiMessages,
+                            stream: true
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error?.message || `HTTP Error ${response.status}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder("utf-8");
+                    let buffer = "";
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed || trimmed.startsWith(":")) continue;
+                            if (trimmed === "data: [DONE]") break;
+
+                            if (trimmed.startsWith("data: ")) {
+                                try {
+                                    const json = JSON.parse(trimmed.slice(6));
+                                    const delta = json.choices?.[0]?.delta?.content || "";
+                                    if (delta) {
+                                        accumulatedResponse += delta;
+                                        aiBubble.innerHTML = marked.parse(accumulatedResponse);
+                                        scrollToBottom();
+                                    }
+                                } catch (err) {
+                                    console.warn("Error parsing SSE stream fragment:", err);
+                                }
+                            }
+                        }
+                    }
+
+                    activeChat.messages.push({ role: 'assistant', content: accumulatedResponse });
+                    saveState();
+
+                } catch (error) {
+                    console.error("API Fetch Error:", error);
+                    accumulatedResponse += `\n\n*[Error: ${error.message || 'Failed to complete request.'}]*`;
+                    aiBubble.innerHTML = marked.parse(accumulatedResponse);
+                } finally {
+                    state.isGenerating = false;
+                    sendBtn.disabled = false;
+                }
+            };
+
+            // Settings Modal Handlers
+            window.openModal = function(id) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.remove('hidden');
+                    el.classList.add('flex');
+                }
+            };
+
+            window.closeModal = function(id) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.add('hidden');
+                    el.classList.remove('flex');
+                }
+            };
+
+            window.saveSettings = function() {
+                const modelInput = document.getElementById('setting-model').value.trim();
+                if (modelInput) state.model = modelInput;
+                saveState();
+                renderApp();
+                closeModal('settings-modal');
+            };
+
+            window.saveSystemPrompt = function() {
+                const sysInput = document.getElementById('setting-system').value;
+                state.systemPrompt = sysInput;
+                saveState();
+                closeModal('system-modal');
+            };
+
+            // Internal Helper Utilities
+            function scrollToBottom() {
+                const container = document.getElementById('messages-container');
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function escapeHtml(str) {
+                return str.replace(/[&<>"']/g, function(m) {
+                    return {
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#039;'
+                    }[m];
+                });
+            }
+        })();
+    </script>
+</body>
+</html>
